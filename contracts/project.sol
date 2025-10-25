@@ -70,6 +70,10 @@ contract RealEstateTokenization is Ownable, ReentrancyGuard {
   event TokensPurchased(uint256 indexed propertyId, address indexed investor,
                         uint256 tokens, uint256 amount);
 
+  event RevenueDistributed(uint256 indexed propertyId, uint256 totalRevenue);
+  event RevenueClaimed(uint256 indexed propertyId, address indexed investor,
+                       uint256 amount);
+
   modifier propertyExists(uint256 _propertyId) {
     require(_propertyId > 0 && _propertyId <= propertyCounter,
             "Property does not exist");
@@ -143,7 +147,6 @@ contract RealEstateTokenization is Ownable, ReentrancyGuard {
                 investments[_propertyId][msg.sender].tokensOwned > 0,
             "Below minimum investment");
 
-    // Update or create investment
     if (investments[_propertyId][msg.sender].tokensOwned == 0) {
       investments[_propertyId][msg.sender] = Investment({
         propertyId : _propertyId,
@@ -182,5 +185,53 @@ contract RealEstateTokenization is Ownable, ReentrancyGuard {
     }
 
     emit TokensPurchased(_propertyId, msg.sender, _tokenAmount, totalCost);
+  }
+
+  function distributeRevenue(uint256 _propertyId)
+      external payable propertyExists(_propertyId)
+          onlyPropertyOwner(_propertyId) nonReentrant {
+    Property storage property = properties[_propertyId];
+    require(property.status == PropertyStatus.Funded, "Property not funded");
+    require(msg.value > 0, "Revenue must be greater than 0");
+
+    uint256 revenuePerToken = msg.value / property.totalTokens;
+    require(revenuePerToken > 0, "Revenue too small to distribute");
+
+    uint256 distributionId = distributionCounter[_propertyId];
+    RevenueDistribution storage distribution =
+        revenueDistributions[_propertyId * 1000000 + distributionId];
+
+    distribution.propertyId = _propertyId;
+    distribution.totalRevenue = msg.value;
+    distribution.revenuePerToken = revenuePerToken;
+    distribution.distributionDate = block.timestamp;
+
+    distributionCounter[_propertyId]++;
+
+    emit RevenueDistributed(_propertyId, msg.value);
+  }
+
+  function claimRevenue(uint256 _propertyId, uint256 _distributionId)
+      external propertyExists(_propertyId) nonReentrant {
+    Investment storage investment = investments[_propertyId][msg.sender];
+    require(investment.tokensOwned > 0, "No tokens owned");
+
+    uint256 distributionKey = _propertyId * 1000000 + _distributionId;
+    RevenueDistribution storage distribution =
+        revenueDistributions[distributionKey];
+
+    require(!distribution.claimed[msg.sender], "Revenue already claimed");
+    require(distribution.totalRevenue > 0, "No revenue to claim");
+
+    uint256 revenueAmount =
+        investment.tokensOwned * distribution.revenuePerToken;
+    require(revenueAmount > 0, "No revenue to claim");
+
+    distribution.claimed[msg.sender] = true;
+    investment.revenueEarned += revenueAmount;
+
+    payable(msg.sender).transfer(revenueAmount);
+
+    emit RevenueClaimed(_propertyId, msg.sender, revenueAmount);
   }
 }
