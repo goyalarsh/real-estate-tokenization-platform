@@ -57,32 +57,27 @@ contract RealEstateTokenization is Ownable, ReentrancyGuard {
     mapping(address = > bool) claimed;
   }
 
-  mapping(uint256 = > Property) public properties;
-  mapping(uint256 = > RevenueDistribution) public revenueDistributions;
-  mapping(address = > uint256[]) public investorProperties;
-  mapping(uint256 = > mapping(address = > Investment)) public investments;
-  mapping(uint256 = > address[]) public propertyInvestors;
-  mapping(uint256 = > uint256) public distributionCounter;
+  mapping(uint256 => Property) public properties;
+  mapping(uint256 => RevenueDistribution) public revenueDistributions;
+  mapping(address => uint256[]) public investorProperties;
+  mapping(uint256 => mapping(address = > Investment)) public investments;
+  mapping(uint256 => address[]) public propertyInvestors;
+  mapping(uint256 => uint256) public distributionCounter;
 
-  event PropertyListed(uint256 indexed propertyId, address indexed owner,
-                       string name, uint256 totalValue, uint256 totalTokens);
-
-  event TokensPurchased(uint256 indexed propertyId, address indexed investor,
-                        uint256 tokens, uint256 amount);
-
+  event PropertyListed(uint256 indexed propertyId, address indexed owner, string name, uint256 totalValue, uint256 totalTokens);
+  event TokensPurchased(uint256 indexed propertyId, address indexed investor, uint256 tokens, uint256 amount);
   event RevenueDistributed(uint256 indexed propertyId, uint256 totalRevenue);
-  event RevenueClaimed(uint256 indexed propertyId, address indexed investor,
-                       uint256 amount);
+  event RevenueClaimed(uint256 indexed propertyId, address indexed investor,uint256 amount);
+  event PropertyCancelled(uint256 indexed propertyId);
+
 
   modifier propertyExists(uint256 _propertyId) {
-    require(_propertyId > 0 && _propertyId <= propertyCounter,
-            "Property does not exist");
+    require(_propertyId > 0 && _propertyId <= propertyCounter, "Property does not exist");
     _;
   }
 
   modifier onlyPropertyOwner(uint256 _propertyId) {
-    require(properties[_propertyId].propertyOwner == msg.sender,
-            "Only property owner can call this");
+    require(properties[_propertyId].propertyOwner == msg.sender,"Only property owner can call this");
     _;
   }
 
@@ -233,5 +228,34 @@ contract RealEstateTokenization is Ownable, ReentrancyGuard {
     payable(msg.sender).transfer(revenueAmount);
 
     emit RevenueClaimed(_propertyId, msg.sender, revenueAmount);
+  }
+  
+  function cancelProperty(uint256 _propertyId)
+      external
+      propertyExists(_propertyId)
+      onlyPropertyOwner(_propertyId)
+      nonReentrant
+  {
+      Property storage property = properties[_propertyId];
+      require(
+          property.status == PropertyStatus.Active,
+          "Can only cancel active properties"
+      );
+      
+      property.status = PropertyStatus.Cancelled;
+      
+      address[] memory investors = propertyInvestors[_propertyId];
+      for (uint256 i = 0; i < investors.length; i++) {
+          address investor = investors[i];
+          Investment storage investment = investments[_propertyId][investor];
+          
+          if (investment.investmentAmount > 0) {
+              uint256 refundAmount = investment.investmentAmount;
+              investment.investmentAmount = 0;
+              payable(investor).transfer(refundAmount);
+          }
+      }
+      
+      emit PropertyCancelled(_propertyId);
   }
 }
