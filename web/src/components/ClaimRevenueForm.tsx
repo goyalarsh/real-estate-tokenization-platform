@@ -10,36 +10,85 @@ export default function ClaimRevenueForm({ contract }: Props) {
   const [distributionId, setDistributionId] = useState('');
   const [status, setStatus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
 
   async function submit() {
     try {
       setError(null);
-      setStatus('Submitting…');
+      setStatus('Submitting transaction…');
+      setLoading(true);
       if (!contract) throw new Error('Connect and set contract address first');
       const tx = await contract.claimRevenue(
         BigInt(propertyId || '0'),
         BigInt(distributionId || '0')
       );
+      setStatus('Transaction pending…');
       const rec = await tx.wait();
-      setStatus(`Tx confirmed: ${rec?.hash ?? ''}`);
+      setStatus(`Transaction confirmed! Hash: ${rec?.hash ?? ''}`);
+      // Reset form
+      setPropertyId('');
+      setDistributionId('');
     } catch (e: any) {
       setError(e.message ?? 'Failed to claim');
       setStatus(null);
+    } finally {
+      setLoading(false);
     }
   }
 
   return (
-    <div style={{ border: '1px solid #ddd', padding: 12, borderRadius: 8 }}>
-      <h3>Claim Revenue (investor)</h3>
-      <div style={{ display: 'grid', gap: 8 }}>
-        <input placeholder="Property ID" value={propertyId} onChange={(e) => setPropertyId(e.target.value)} />
-        <input placeholder="Distribution ID" value={distributionId} onChange={(e) => setDistributionId(e.target.value)} />
-        <button onClick={submit}>Claim</button>
+    <div className="card fade-in">
+      <div className="card-header">
+        <span className="card-icon">🎁</span>
+        <h3 className="card-title">Claim Revenue</h3>
+        <span className="card-badge badge-investor">Investor</span>
       </div>
-      {status && <div>{status}</div>}
-      {error && <div style={{ color: 'red' }}>{error}</div>}
+      
+      <div style={{ display: 'grid', gap: '1rem' }}>
+        <div className="form-group">
+          <label htmlFor="propertyId">Property ID</label>
+          <input 
+            id="propertyId"
+            type="text"
+            placeholder="e.g., 0"
+            value={propertyId} 
+            onChange={(e) => setPropertyId(e.target.value)} 
+          />
+        </div>
+        
+        <div className="form-group">
+          <label htmlFor="distributionId">Distribution ID</label>
+          <input 
+            id="distributionId"
+            type="text"
+            placeholder="e.g., 0"
+            value={distributionId} 
+            onChange={(e) => setDistributionId(e.target.value)} 
+          />
+        </div>
+        
+        <button 
+          onClick={submit} 
+          disabled={loading || !contract}
+          className="button-secondary"
+          style={{ marginTop: '0.5rem' }}
+        >
+          {loading ? '⏳ Claiming...' : '✨ Claim Revenue'}
+        </button>
+      </div>
+      
+      {status && (
+        <div className={`status-message ${status.includes('confirmed') ? 'status-success' : 'status-pending'}`}>
+          <span>{status.includes('confirmed') ? '✅' : '⏳'}</span>
+          <span>{status}</span>
+        </div>
+      )}
+      {error && (
+        <div className="status-message status-error">
+          <span>⚠️</span>
+          <span>{error}</span>
+        </div>
+      )}
     </div>
   );
 }
-
-

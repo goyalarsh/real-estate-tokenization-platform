@@ -30,17 +30,32 @@ export default function ConnectWallet({ onConnected }: Props) {
 
   if (account) {
     const short = `${account.slice(0, 6)}...${account.slice(-4)}`;
-    return <div>Connected: {short}</div>;
+    return (
+      <div className="wallet-info fade-in">
+        <div className="wallet-status">
+          <span className="status-dot"></span>
+          Connected
+        </div>
+        <div className="wallet-address">{short}</div>
+      </div>
+    );
   }
 
   return (
-    <div>
-      <button onClick={handleConnect} disabled={connecting}>
-        {connecting ? 'Connecting…' : 'Connect Wallet'}
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1rem' }}>
+      <button onClick={handleConnect} disabled={connecting} className="button-primary" style={{ minWidth: '200px' }}>
+        {connecting ? (
+          <>⏳ Connecting…</>
+        ) : (
+          <>🔗 Connect Wallet</>
+        )}
       </button>
-      {error && <div style={{ color: 'red' }}>{error}</div>}
+      {error && (
+        <div className="status-message status-error">
+          <span>⚠️</span>
+          <span>{error}</span>
+        </div>
+      )}
     </div>
   );
 }
-
-

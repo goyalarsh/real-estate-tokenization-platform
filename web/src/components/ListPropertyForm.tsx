@@ -17,11 +17,13 @@ export default function ListPropertyForm({ contract }: Props) {
   const [fundingDuration, setFundingDuration] = useState('');
   const [status, setStatus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
 
   async function submit() {
     try {
       setError(null);
-      setStatus('Submitting…');
+      setStatus('Submitting transaction…');
+      setLoading(true);
       if (!contract) throw new Error('Connect and set contract address first');
       const tx = await contract.listProperty(
         name,
@@ -34,40 +36,159 @@ export default function ListPropertyForm({ contract }: Props) {
         Number(investmentType),
         BigInt(fundingDuration || '0')
       );
+      setStatus('Transaction pending…');
       const rec = await tx.wait();
-      setStatus(`Tx confirmed: ${rec?.hash ?? ''}`);
+      setStatus(`Transaction confirmed! Hash: ${rec?.hash ?? ''}`);
+      // Reset form
+      setName('');
+      setLocation('');
+      setDocumentHash('');
+      setTotalValue('');
+      setTotalTokens('');
+      setMinInvestment('');
+      setExpectedROI('');
+      setInvestmentType('0');
+      setFundingDuration('');
     } catch (e: any) {
       setError(e.message ?? 'Failed to list property');
       setStatus(null);
+    } finally {
+      setLoading(false);
     }
   }
 
   return (
-    <div style={{ border: '1px solid #ddd', padding: 12, borderRadius: 8 }}>
-      <h3>List Property (owner)</h3>
-      <div style={{ display: 'grid', gap: 8 }}>
-        <input placeholder="Name" value={name} onChange={(e) => setName(e.target.value)} />
-        <input placeholder="Location" value={location} onChange={(e) => setLocation(e.target.value)} />
-        <input placeholder="Document Hash" value={documentHash} onChange={(e) => setDocumentHash(e.target.value)} />
-        <input placeholder="Total Value (wei)" value={totalValue} onChange={(e) => setTotalValue(e.target.value)} />
-        <input placeholder="Total Tokens" value={totalTokens} onChange={(e) => setTotalTokens(e.target.value)} />
-        <input placeholder="Min Investment (wei)" value={minInvestment} onChange={(e) => setMinInvestment(e.target.value)} />
-        <input placeholder="Expected ROI (bps or % units)" value={expectedROI} onChange={(e) => setExpectedROI(e.target.value)} />
-        <label>
-          Investment Type
-          <select value={investmentType} onChange={(e) => setInvestmentType(e.target.value)}>
-            <option value="0">Rental</option>
-            <option value="1">Appreciation</option>
-            <option value="2">Both</option>
-          </select>
-        </label>
-        <input placeholder="Funding Duration (seconds)" value={fundingDuration} onChange={(e) => setFundingDuration(e.target.value)} />
-        <button onClick={submit}>Create</button>
+    <div className="card fade-in">
+      <div className="card-header">
+        <span className="card-icon">🏢</span>
+        <h3 className="card-title">List Property</h3>
+        <span className="card-badge badge-owner">Owner</span>
       </div>
-      {status && <div>{status}</div>}
-      {error && <div style={{ color: 'red' }}>{error}</div>}
+      
+      <div style={{ display: 'grid', gap: '1rem' }}>
+        <div className="form-group">
+          <label htmlFor="name">Property Name</label>
+          <input 
+            id="name"
+            type="text"
+            placeholder="e.g., Downtown Luxury Apartments"
+            value={name} 
+            onChange={(e) => setName(e.target.value)} 
+          />
+        </div>
+        
+        <div className="form-group">
+          <label htmlFor="location">Location</label>
+          <input 
+            id="location"
+            type="text"
+            placeholder="e.g., New York, NY"
+            value={location} 
+            onChange={(e) => setLocation(e.target.value)} 
+          />
+        </div>
+        
+        <div className="form-group">
+          <label htmlFor="documentHash">Document Hash</label>
+          <input 
+            id="documentHash"
+            type="text"
+            placeholder="IPFS hash or document identifier"
+            value={documentHash} 
+            onChange={(e) => setDocumentHash(e.target.value)} 
+          />
+        </div>
+        
+        <div className="form-group">
+          <label htmlFor="totalValue">Total Value (wei)</label>
+          <input 
+            id="totalValue"
+            type="text"
+            placeholder="e.g., 1000000000000000000"
+            value={totalValue} 
+            onChange={(e) => setTotalValue(e.target.value)} 
+          />
+        </div>
+        
+        <div className="form-group">
+          <label htmlFor="totalTokens">Total Tokens</label>
+          <input 
+            id="totalTokens"
+            type="text"
+            placeholder="e.g., 1000000"
+            value={totalTokens} 
+            onChange={(e) => setTotalTokens(e.target.value)} 
+          />
+        </div>
+        
+        <div className="form-group">
+          <label htmlFor="minInvestment">Minimum Investment (wei)</label>
+          <input 
+            id="minInvestment"
+            type="text"
+            placeholder="e.g., 100000000000000000"
+            value={minInvestment} 
+            onChange={(e) => setMinInvestment(e.target.value)} 
+          />
+        </div>
+        
+        <div className="form-group">
+          <label htmlFor="expectedROI">Expected ROI (bps or % units)</label>
+          <input 
+            id="expectedROI"
+            type="text"
+            placeholder="e.g., 500 (for 5%)"
+            value={expectedROI} 
+            onChange={(e) => setExpectedROI(e.target.value)} 
+          />
+        </div>
+        
+        <div className="form-group">
+          <label htmlFor="investmentType">Investment Type</label>
+          <select 
+            id="investmentType"
+            value={investmentType} 
+            onChange={(e) => setInvestmentType(e.target.value)}
+          >
+            <option value="0">💰 Rental</option>
+            <option value="1">📈 Appreciation</option>
+            <option value="2">💎 Both</option>
+          </select>
+        </div>
+        
+        <div className="form-group">
+          <label htmlFor="fundingDuration">Funding Duration (seconds)</label>
+          <input 
+            id="fundingDuration"
+            type="text"
+            placeholder="e.g., 2592000 (30 days)"
+            value={fundingDuration} 
+            onChange={(e) => setFundingDuration(e.target.value)} 
+          />
+        </div>
+        
+        <button 
+          onClick={submit} 
+          disabled={loading || !contract}
+          className="button-primary"
+          style={{ marginTop: '0.5rem' }}
+        >
+          {loading ? '⏳ Creating...' : '✨ Create Property'}
+        </button>
+      </div>
+      
+      {status && (
+        <div className={`status-message ${status.includes('confirmed') ? 'status-success' : 'status-pending'}`}>
+          <span>{status.includes('confirmed') ? '✅' : '⏳'}</span>
+          <span>{status}</span>
+        </div>
+      )}
+      {error && (
+        <div className="status-message status-error">
+          <span>⚠️</span>
+          <span>{error}</span>
+        </div>
+      )}
     </div>
   );
 }
-
-

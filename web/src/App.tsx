@@ -17,18 +17,25 @@ function App() {
   const onContractReady = useCallback((ctr: Contract | null) => setContract(ctr), [])
 
   return (
-    <div style={{ maxWidth: 900, margin: '0 auto', padding: 16 }}>
-      <h2>Real Estate Tokenization</h2>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-        <ConnectWallet onConnected={onConnected} />
-      </div>
-      <ContractControls ctx={ctx} onContractReady={onContractReady} />
+    <div className="app">
+      <div className="app-container">
+        <header className="app-header">
+          <h1 className="app-title">🏘️ Real Estate Tokenization</h1>
+          <p className="app-subtitle">Decentralized Property Investment Platform</p>
+        </header>
+        
+        <div className="wallet-section">
+          <ConnectWallet onConnected={onConnected} />
+        </div>
+        
+        <ContractControls ctx={ctx} onContractReady={onContractReady} />
 
-      <div style={{ display: 'grid', gap: 12, marginTop: 12 }}>
-        <ListPropertyForm contract={contract} />
-        <PurchaseTokensForm contract={contract} />
-        <DistributeRevenueForm contract={contract} />
-        <ClaimRevenueForm contract={contract} />
+        <div className="content-grid">
+          <ListPropertyForm contract={contract} />
+          <PurchaseTokensForm contract={contract} />
+          <DistributeRevenueForm contract={contract} />
+          <ClaimRevenueForm contract={contract} />
+        </div>
       </div>
     </div>
   )
