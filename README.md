@@ -4,6 +4,8 @@ A blockchain-based platform that enables fractional ownership of real estate pro
 
 ## Tech Stack
 
+
+
 ### Frontend
 - **Next.js 14** - React framework with App Router
 - **TypeScript** - Type-safe development
