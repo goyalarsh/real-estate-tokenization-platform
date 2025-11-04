@@ -164,5 +164,7 @@ real-estate-tokenization-platform/
 - **Mortgage Tokenization** - Fractional mortgage lending
 - **Global Expansion** - Support for international properties
 
+Contract Address: 0xCE1c8187138DA831E19d4395C103D181C5b5C7d7
+
 <img width="1600" height="1041" alt="image" src="https://github.com/user-attachments/assets/c79856e4-5a72-4921-baa1-c67b7e9d5d3b" />
 
