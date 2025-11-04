@@ -1,387 +1,167 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.20;
+pragma solidity ^0.8.19;
 
-import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
-import "@openzeppelin/contracts/access/Ownable.sol";
-import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
-
-contract RealEstateTokenization is Ownable, ReentrancyGuard {
-    uint256 public propertyCounter;
-    uint256 public platformFeePercent = 2;
-
-    enum PropertyStatus {
-        Pending,
-        Active,
-        Funded,
-        Completed,
-        Cancelled
-    }
-    enum InvestmentType {
-        Rental,
-        Appreciation,
-        Both
-    }
-
+/**
+ * @title RealEstateTokenization
+ * @dev A platform for tokenizing real estate properties and enabling fractional ownership
+ */
+contract RealEstateTokenization {
+    
     struct Property {
         uint256 propertyId;
-        address propertyOwner;
-        string name;
-        string location;
-        string documentHash;
+        string propertyAddress;
         uint256 totalValue;
-        uint256 tokenPrice;
         uint256 totalTokens;
-        uint256 tokensSold;
-        uint256 minInvestment;
-        uint256 expectedROI;
-        InvestmentType investmentType;
-        PropertyStatus status;
-        uint256 listingDate;
-        uint256 fundingDeadline;
-        address tokenContract;
-        bool revenueDistributed;
+        uint256 availableTokens;
+        address owner;
+        bool isActive;
+        uint256 pricePerToken;
     }
-
+    
     struct Investment {
         uint256 propertyId;
-        address investor;
-        uint256 tokensOwned;
-        uint256 investmentAmount;
+        uint256 tokenAmount;
         uint256 investmentDate;
-        uint256 revenueEarned;
     }
-
-    struct RevenueDistribution {
-        uint256 propertyId;
-        uint256 totalRevenue;
-        uint256 revenuePerToken;
-        uint256 distributionDate;
-        mapping(address => bool) claimed;
-    }
-
+    
+    // State variables
+    uint256 private propertyCounter;
     mapping(uint256 => Property) public properties;
-    mapping(uint256 => RevenueDistribution) public revenueDistributions;
-    mapping(address => uint256[]) public investorProperties;
-    mapping(uint256 => mapping(address => Investment)) public investments;
-    mapping(uint256 => address[]) public propertyInvestors;
-    mapping(uint256 => uint256) public distributionCounter;
-
-    event PropertyListed(
-        uint256 indexed propertyId,
-        address indexed owner,
-        string name,
-        uint256 totalValue,
-        uint256 totalTokens
-    );
-    event TokensPurchased(
-        uint256 indexed propertyId,
-        address indexed investor,
-        uint256 tokens,
-        uint256 amount
-    );
-    event PropertyFunded(uint256 indexed propertyId, uint256 totalRaised);
-    event RevenueDistributed(uint256 indexed propertyId, uint256 totalRevenue);
-    event RevenueClaimed(
-        uint256 indexed propertyId,
-        address indexed investor,
-        uint256 amount
-    );
-    event PropertyCancelled(uint256 indexed propertyId);
-    event PropertyCompleted(uint256 indexed propertyId);
-
-    modifier propertyExists(uint256 _propertyId) {
-        require(
-            _propertyId > 0 && _propertyId <= propertyCounter,
-            "Property does not exist"
-        );
-        _;
-    }
-
-    modifier onlyPropertyOwner(uint256 _propertyId) {
-        require(
-            properties[_propertyId].propertyOwner == msg.sender,
-            "Only property owner can call this"
-        );
-        _;
-    }
-
-    constructor() Ownable(msg.sender) {}
-
+    mapping(address => mapping(uint256 => uint256)) public investorTokens; // investor => propertyId => tokens
+    mapping(address => uint256[]) private investorProperties;
+    
+    // Events
+    event PropertyListed(uint256 indexed propertyId, string propertyAddress, uint256 totalValue, uint256 totalTokens);
+    event TokensPurchased(uint256 indexed propertyId, address indexed investor, uint256 tokenAmount, uint256 totalCost);
+    event TokensTransferred(uint256 indexed propertyId, address indexed from, address indexed to, uint256 tokenAmount);
+    
+    /**
+     * @dev List a new property for tokenization
+     * @param _propertyAddress Physical address of the property
+     * @param _totalValue Total valuation of the property in wei
+     * @param _totalTokens Number of tokens to represent the property
+     */
     function listProperty(
-        string memory _name,
-        string memory _location,
-        string memory _documentHash,
+        string memory _propertyAddress,
         uint256 _totalValue,
-        uint256 _totalTokens,
-        uint256 _minInvestment,
-        uint256 _expectedROI,
-        InvestmentType _investmentType,
-        uint256 _fundingDuration
+        uint256 _totalTokens
     ) external returns (uint256) {
-        require(_totalValue > 0, "Total value must be greater than 0");
+        require(_totalValue > 0, "Property value must be greater than 0");
         require(_totalTokens > 0, "Total tokens must be greater than 0");
-        require(_fundingDuration > 0, "Funding duration must be specified");
-
+        require(bytes(_propertyAddress).length > 0, "Property address cannot be empty");
+        
         propertyCounter++;
-        uint256 tokenPrice = _totalValue / _totalTokens;
-
-        PropertyToken newToken = new PropertyToken(
-            _name,
-            string(abi.encodePacked("RE", uint2str(propertyCounter))),
-            _totalTokens
-        );
-
+        uint256 pricePerToken = _totalValue / _totalTokens;
+        
         properties[propertyCounter] = Property({
             propertyId: propertyCounter,
-            propertyOwner: msg.sender,
-            name: _name,
-            location: _location,
-            documentHash: _documentHash,
+            propertyAddress: _propertyAddress,
             totalValue: _totalValue,
-            tokenPrice: tokenPrice,
             totalTokens: _totalTokens,
-            tokensSold: 0,
-            minInvestment: _minInvestment,
-            expectedROI: _expectedROI,
-            investmentType: _investmentType,
-            status: PropertyStatus.Active,
-            listingDate: block.timestamp,
-            fundingDeadline: block.timestamp + _fundingDuration,
-            tokenContract: address(newToken),
-            revenueDistributed: false
+            availableTokens: _totalTokens,
+            owner: msg.sender,
+            isActive: true,
+            pricePerToken: pricePerToken
         });
-
-        emit PropertyListed(
-            propertyCounter,
-            msg.sender,
-            _name,
-            _totalValue,
-            _totalTokens
-        );
-
+        
+        emit PropertyListed(propertyCounter, _propertyAddress, _totalValue, _totalTokens);
         return propertyCounter;
     }
-
-    function purchaseTokens(
-        uint256 _propertyId,
-        uint256 _tokenAmount
-    ) external payable propertyExists(_propertyId) nonReentrant {
+    
+    /**
+     * @dev Purchase tokens of a listed property
+     * @param _propertyId ID of the property to invest in
+     * @param _tokenAmount Number of tokens to purchase
+     */
+    function purchaseTokens(uint256 _propertyId, uint256 _tokenAmount) external payable {
         Property storage property = properties[_propertyId];
-
-        require(
-            property.status == PropertyStatus.Active,
-            "Property not active"
-        );
-        require(
-            block.timestamp <= property.fundingDeadline,
-            "Funding period ended"
-        );
-        require(_tokenAmount > 0, "Must purchase at least 1 token");
-        require(
-            property.tokensSold + _tokenAmount <= property.totalTokens,
-            "Not enough tokens available"
-        );
-
-        uint256 totalCost = _tokenAmount * property.tokenPrice;
+        
+        require(property.isActive, "Property is not active");
+        require(_tokenAmount > 0, "Token amount must be greater than 0");
+        require(_tokenAmount <= property.availableTokens, "Not enough tokens available");
+        
+        uint256 totalCost = property.pricePerToken * _tokenAmount;
         require(msg.value >= totalCost, "Insufficient payment");
-        require(
-            msg.value >= property.minInvestment ||
-                investments[_propertyId][msg.sender].tokensOwned > 0,
-            "Below minimum investment"
-        );
-
-        if (investments[_propertyId][msg.sender].tokensOwned == 0) {
-            investments[_propertyId][msg.sender] = Investment({
-                propertyId: _propertyId,
-                investor: msg.sender,
-                tokensOwned: _tokenAmount,
-                investmentAmount: msg.value,
-                investmentDate: block.timestamp,
-                revenueEarned: 0
-            });
-            propertyInvestors[_propertyId].push(msg.sender);
+        
+        // Update property state
+        property.availableTokens -= _tokenAmount;
+        
+        // Update investor state
+        if (investorTokens[msg.sender][_propertyId] == 0) {
             investorProperties[msg.sender].push(_propertyId);
-        } else {
-            investments[_propertyId][msg.sender].tokensOwned += _tokenAmount;
-            investments[_propertyId][msg.sender].investmentAmount += msg.value;
         }
-
-        property.tokensSold += _tokenAmount;
-
-        PropertyToken token = PropertyToken(property.tokenContract);
-        token.mint(msg.sender, _tokenAmount);
-
-        if (property.tokensSold == property.totalTokens) {
-            property.status = PropertyStatus.Funded;
-
-            uint256 platformFee = (property.totalValue * platformFeePercent) /
-                100;
-            uint256 ownerAmount = property.totalValue - platformFee;
-
-            payable(property.propertyOwner).transfer(ownerAmount);
-            payable(owner()).transfer(platformFee);
-
-            emit PropertyFunded(_propertyId, property.totalValue);
-        }
-
+        investorTokens[msg.sender][_propertyId] += _tokenAmount;
+        
+        // Transfer funds to property owner
+        payable(property.owner).transfer(totalCost);
+        
+        // Refund excess payment
         if (msg.value > totalCost) {
             payable(msg.sender).transfer(msg.value - totalCost);
         }
-
+        
         emit TokensPurchased(_propertyId, msg.sender, _tokenAmount, totalCost);
     }
-
-    function distributeRevenue(
-        uint256 _propertyId
-    )
-        external
-        payable
-        propertyExists(_propertyId)
-        onlyPropertyOwner(_propertyId)
-        nonReentrant
-    {
-        Property storage property = properties[_propertyId];
-        require(
-            property.status == PropertyStatus.Funded,
-            "Property not funded"
-        );
-        require(msg.value > 0, "Revenue must be greater than 0");
-
-        uint256 revenuePerToken = msg.value / property.totalTokens;
-        require(revenuePerToken > 0, "Revenue too small to distribute");
-
-        uint256 distributionId = distributionCounter[_propertyId];
-        RevenueDistribution storage distribution = revenueDistributions[
-            _propertyId * 1000000 + distributionId
-        ];
-
-        distribution.propertyId = _propertyId;
-        distribution.totalRevenue = msg.value;
-        distribution.revenuePerToken = revenuePerToken;
-        distribution.distributionDate = block.timestamp;
-
-        distributionCounter[_propertyId]++;
-
-        emit RevenueDistributed(_propertyId, msg.value);
-    }
-
-    function claimRevenue(
+    
+    /**
+     * @dev Transfer tokens to another address
+     * @param _propertyId ID of the property
+     * @param _to Recipient address
+     * @param _tokenAmount Number of tokens to transfer
+     */
+    function transferTokens(
         uint256 _propertyId,
-        uint256 _distributionId
-    ) external propertyExists(_propertyId) nonReentrant {
-        Investment storage investment = investments[_propertyId][msg.sender];
-        require(investment.tokensOwned > 0, "No tokens owned");
-
-        uint256 distributionKey = _propertyId * 1000000 + _distributionId;
-        RevenueDistribution storage distribution = revenueDistributions[
-            distributionKey
-        ];
-
-        require(!distribution.claimed[msg.sender], "Revenue already claimed");
-        require(distribution.totalRevenue > 0, "No revenue to claim");
-
-        uint256 revenueAmount = investment.tokensOwned *
-            distribution.revenuePerToken;
-        require(revenueAmount > 0, "No revenue to claim");
-
-        distribution.claimed[msg.sender] = true;
-        investment.revenueEarned += revenueAmount;
-
-        payable(msg.sender).transfer(revenueAmount);
-
-        emit RevenueClaimed(_propertyId, msg.sender, revenueAmount);
-    }
-
-    function cancelProperty(
-        uint256 _propertyId
-    )
-        external
-        propertyExists(_propertyId)
-        onlyPropertyOwner(_propertyId)
-        nonReentrant
-    {
-        Property storage property = properties[_propertyId];
-        require(
-            property.status == PropertyStatus.Active,
-            "Can only cancel active properties"
-        );
-
-        property.status = PropertyStatus.Cancelled;
-
-        address[] memory investors = propertyInvestors[_propertyId];
-        for (uint256 i = 0; i < investors.length; i++) {
-            address investor = investors[i];
-            Investment storage investment = investments[_propertyId][investor];
-
-            if (investment.investmentAmount > 0) {
-                uint256 refundAmount = investment.investmentAmount;
-                investment.investmentAmount = 0;
-                payable(investor).transfer(refundAmount);
-            }
+        address _to,
+        uint256 _tokenAmount
+    ) external {
+        require(_to != address(0), "Invalid recipient address");
+        require(_to != msg.sender, "Cannot transfer to yourself");
+        require(properties[_propertyId].isActive, "Property is not active");
+        require(investorTokens[msg.sender][_propertyId] >= _tokenAmount, "Insufficient token balance");
+        require(_tokenAmount > 0, "Token amount must be greater than 0");
+        
+        // Update balances
+        investorTokens[msg.sender][_propertyId] -= _tokenAmount;
+        
+        if (investorTokens[_to][_propertyId] == 0) {
+            investorProperties[_to].push(_propertyId);
         }
-
-        emit PropertyCancelled(_propertyId);
+        investorTokens[_to][_propertyId] += _tokenAmount;
+        
+        emit TokensTransferred(_propertyId, msg.sender, _to, _tokenAmount);
     }
-
-    function getInvestorProperties(
-        address _investor
-    ) external view returns (uint256[] memory) {
+    
+    // View functions
+    function getPropertyDetails(uint256 _propertyId) external view returns (
+        string memory propertyAddress,
+        uint256 totalValue,
+        uint256 totalTokens,
+        uint256 availableTokens,
+        address owner,
+        bool isActive,
+        uint256 pricePerToken
+    ) {
+        Property memory property = properties[_propertyId];
+        return (
+            property.propertyAddress,
+            property.totalValue,
+            property.totalTokens,
+            property.availableTokens,
+            property.owner,
+            property.isActive,
+            property.pricePerToken
+        );
+    }
+    
+    function getInvestorTokenBalance(address _investor, uint256 _propertyId) external view returns (uint256) {
+        return investorTokens[_investor][_propertyId];
+    }
+    
+    function getInvestorProperties(address _investor) external view returns (uint256[] memory) {
         return investorProperties[_investor];
     }
-
-    function getPropertyInvestors(
-        uint256 _propertyId
-    ) external view propertyExists(_propertyId) returns (address[] memory) {
-        return propertyInvestors[_propertyId];
-    }
-
-    function getInvestment(
-        uint256 _propertyId,
-        address _investor
-    ) external view propertyExists(_propertyId) returns (Investment memory) {
-        return investments[_propertyId][_investor];
-    }
-
-    function setPlatformFee(uint256 _newFeePercent) external onlyOwner {
-        require(_newFeePercent <= 10, "Fee cannot exceed 10%");
-        platformFeePercent = _newFeePercent;
-    }
-
-    function uint2str(uint256 _i) internal pure returns (string memory) {
-        if (_i == 0) {
-            return "0";
-        }
-        uint256 j = _i;
-        uint256 len;
-        while (j != 0) {
-            len++;
-            j /= 10;
-        }
-        bytes memory bstr = new bytes(len);
-        uint256 k = len;
-        while (_i != 0) {
-            k = k - 1;
-            uint8 temp = (48 + uint8(_i - (_i / 10) * 10));
-            bytes1 b1 = bytes1(temp);
-            bstr[k] = b1;
-            _i /= 10;
-        }
-        return string(bstr);
-    }
-}
-
-contract PropertyToken is ERC20, Ownable {
-    constructor(
-        string memory name,
-        string memory symbol,
-        uint256 totalSupply
-    ) ERC20(name, symbol) Ownable(msg.sender) {}
-
-    function mint(address to, uint256 amount) external onlyOwner {
-        _mint(to, amount);
-    }
-
-    function burn(address from, uint256 amount) external onlyOwner {
-        _burn(from, amount);
+    
+    function getTotalProperties() external view returns (uint256) {
+        return propertyCounter;
     }
 }
